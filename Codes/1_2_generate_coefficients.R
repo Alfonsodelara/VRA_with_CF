@@ -33,8 +33,8 @@ xy <- dplyr::select(analysis_field, unique_cell_id) %>%
 # --- Range (m) --- #
 sp_range <- 400
 
-# --- Number of iterations --- #
-B <- 1000
+# --- Number of iterations --- #         IMPORTANT!!!!!! Original is 1000 iterations
+B <- 100
 
 
 #/*--------------------------------------------------------*/
@@ -178,6 +178,7 @@ coef_data[, beta_norm := (beta - mean(beta))/sd(beta)] %>%
     # m_error_uncorrelated = NULL
   )]
 
-saveRDS(coef_data, here("Data/coef_data.rds")
+saveRDS(coef_data, here("Data/coef_data.rds"))
 
 
+#readRDS(here("Data/coef_data.rds"))%>% View()

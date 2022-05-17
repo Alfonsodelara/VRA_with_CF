@@ -41,7 +41,7 @@ sample_dt_cell <- prepare_raw_data(x, field=field, coef_data_m=coef_data_m, coef
   .$reg_raw_data
 
 field_cell_sf <- 
-  left_join(select(field, unique_cell_id), sample_dt_cell, by="unique_cell_id")%>%
+  left_join(dplyr::select(field, unique_cell_id), sample_dt_cell, by="unique_cell_id")%>%
     na.omit() %>%
     mutate(plot_id = ceiling(subplot_id/4)) %>%
     filter(padding==1)
@@ -75,7 +75,7 @@ field_subplot_sf <-
       theta_2 = mean(theta_2)
   ) %>%
   mutate(unique_subplot_id = paste0(strip_id,"_",subplot_id))%>%
-  select(!c(strip_id, subplot_id))
+  dplyr::select(!c(strip_id, subplot_id))
 
 saveRDS(field_subplot_sf, here("Data/sample_field_subplot_sf.rds"))
 

@@ -28,7 +28,7 @@ pN <- price_table[2, pN]
 #' # Generate Cell-level Dataset 
 # /*=================================================*/
 raw_data <- lapply(
-	1:100, function(x) {       ##IMPORTANT!!!!!! Original is 1000 iterations
+	1:3, function(x) {       ##IMPORTANT!!!!!! Original is 1000 iterations
 		prepare_raw_data(
 			i = x,
 			field = field,
@@ -51,7 +51,7 @@ saveRDS(test_raw_data, here("Data/test_raw_data.rds"))
 # /*===========================================================*/
 ##== Aggregate Cell-Level Field Data to Subplot-Level Field Data ==##
 sim_data <- lapply(
-	1:100, function(x) {       ##IMPORTANT!!!!!! Original is 1000 iterations
+	1:3, function(x) {       ##IMPORTANT!!!!!! Original is 1000 iterations
 		prepare_data_for_sim(
 			reg_raw_data = reg_raw_data[sim==x,],
 			test_raw_data = test_raw_data[sim==x,]
@@ -64,4 +64,7 @@ test_data <- sapply(sim_data,"[",2)%>%rbindlist()
 
 saveRDS(reg_data, here("Data/reg_data.rds"))
 saveRDS(test_data, here("Data/test_data.rds"))
+
+
+
 

@@ -1,3 +1,5 @@
+#reticulate::py_install("pandas")
+reticulate::repl_python()
 import numpy as np
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -216,7 +218,7 @@ rmseTest_list =[]
 dim = 9
 
 iterMax = 1
-simIDs = [1000]
+simIDs = [10]       ##IMPORTANT!!!!!! Original is 1000 iterations
 for simID in simIDs:
     print('Simulation N: {}/{}'.format(simID,iterMax))
     t = time.time()

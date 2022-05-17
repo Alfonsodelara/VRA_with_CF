@@ -8,13 +8,16 @@ library(grf)
 library(tidyverse)
 library(data.table)
 library(future.apply)
+library(xgboost)
+library(ranger)
 
 # === Load Functions === #
+setwd(dirname(rstudioapi::getSourceEditorContext()$path))
 setwd(here())
-source("./Codes/0_2_functions_main_sim.R")
+source("./Codes/0_2_functions_main_sim_ALF.R")
 
 # === Load Data Sets === #
-reg_data_all <- readRDS("./Data/reg_data.rds")
+reg_data_all <- readRDS("./Data/reg_data.rds") 
 test_data_all <- readRDS("./Data/test_data.rds")
 
 
@@ -26,7 +29,6 @@ test_data_all <- readRDS("./Data/test_data.rds")
 
 # === Set up for Parallel Computations === #
 # --- Parallel implementation using the future_lapply --- #
-#plan(multicore, workers = availableCores()-2)    multicore not supported on windows
 plan(multisession)
 options(future.globals.maxSize= 850*1024^2)
 
@@ -36,14 +38,14 @@ pN <- price_table[2, pN]
 
 # --- Modeling Scenario --- #
 var_ls_variations <- list(
-    c("alpha", "beta", "ymax"),
-    c("alpha", "beta", "ymax", "theta_1", "theta_2"),
-    c("alpha1", "alpha2", "beta1", "beta2", "ymax1", "ymax2"),
-    c("alpha1", "alpha2", "beta1", "beta2", "ymax1", "ymax2", "theta_1", "theta_2")
+  #   c("alpha", "beta", "ymax"),
+  #   c("alpha", "beta", "ymax", "theta_1", "theta_2"),
+  #   c("alpha1", "alpha2", "beta1", "beta2", "ymax1", "ymax2"),
+     c("alpha1", "alpha2", "beta1", "beta2", "ymax1", "ymax2", "theta_1", "theta_2")
   )
 
 # --- Number of iterations --- #
-B=2       ##IMPORTANT!!!!!! Original is 1000 iterations
+B=1       ##IMPORTANT!!!!!! Original is 1000 iterations
 
 # === Start Simulations === # 
 for (var in var_ls_variations){
@@ -65,4 +67,5 @@ for (var in var_ls_variations){
 	saveRDS(sim_results, paste0("./Data/Forest_rawRes/forest_SimRes_", paste0(var, collapse = "_"), ".rds"))
 }
 
+#readRDS("./Data/Forest_rawRes/forest_SimRes_alpha_beta_ymax.rds")%>%View()
 

@@ -9,21 +9,22 @@
 library(here)
 library(ggplot2)
 library(grf)
-library(bcf)
 library(sf)
 library(here)
 library(data.table)
 library(tidyverse)
 library(ggthemes)
 library(future.apply)
+library(xgboost)
+library(ranger)
 
 # === Load Functions === #
 source(here("Codes/0_1_functions_gen_analysis_data.R"))
-source(here("Codes/0_2_functions_main_sim.R"))
+source(here("Codes/0_2_functions_main_sim_ALF.R"))
 
 # === Load Data Sets === # 
-reg_data_all <- readRDS(here("Data/reg_data.rds")) %>% filter(sim==1)
-test_data_all <- readRDS(here("Data/test_data.rds")) %>% filter(sim==1)
+reg_data_all <- readRDS(here("Data/reg_data.rds"))
+test_data_all <- readRDS(here("Data/test_data.rds"))
 
 # === Pick a single simulation round === #
 x = 1
@@ -55,7 +56,7 @@ var_ls_variations <- list(
 
 te_case_data <- expand.grid(
     var_ls = var_ls_variations,
-    Method = c("CF_base", "BRF", "RF", "BCF")    
+    Method = c("CF_base", "XCF_base")#, "RF_split", "XGBRF","BRF", "RF")    
   ) %>%
   tibble()
 
@@ -86,32 +87,8 @@ forest_te_dt <-
   	)%>%
   	unnest(., cols= "te_data")%>%
   	data.table()%>%
-  	.[, Method := factor(Method, levels = c("RF", "BRF", "CF_base"))] %>%
+  	.[, Method := factor(Method, levels = c("RF_split", "XGBRF","RF", "BRF", "XCF_base", "CF_base"))] %>%
   	.[,!c("var_ls")]
-
-
-
-#' # /*================================================================*/
-#' #' # (2) Treatment Effect Calculation by CNN
-#' # /*================================================================*/
-#' 
-#' # === Load CNN Results (case: aabbyytt) === #
-#' res_cnn <- 
-#' 	fread(here("Data/CNN_rawRes_onEval/alldata_model4.csv"))%>%
-#' 	setnames("pred", "yield_hat")%>%
-#' 	.[sim==1, rate %in% N_levels, .(id, rate, yield_hat, sim)] %>%
-#' 	.[, c("subplot_id", "strip_id") := tstrsplit(id, "_", fixed=TRUE)] %>%
-#'   	.[,unique_subplot_id := paste0(strip_id,"_",subplot_id)] %>%
-#'   	.[unique_subplot_id %in% subplots_infiled, ] %>%
-#'   	.[,Method := "CNN"] %>%
-#'   	.[,.(Method, unique_subplot_id, rate, yield_hat)]
-#' 
-#' 
-#' cnn_te_dt <- 
-#' 	copy(res_cnn) %>%
-#' 	 .[, yield_base := .SD[rate==min(rate), yield_hat], by = .(unique_subplot_id)] %>%
-#'     .[, te_base := yield_hat - yield_base] %>%
-#'     .[, .(Method, unique_subplot_id, rate, te_base)]
 
 
 # === Merge the results with forest_te_dt === #

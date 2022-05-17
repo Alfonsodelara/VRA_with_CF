@@ -15,22 +15,17 @@ price_table <- data.table(
 sim_par <- function(i, var_ls, reg_data, test_data, N_levels) {
   print(paste0("working on ", i, " th iteration."))
   # i = 1; var_ls = c("alpha", "beta", "ymax")
-  # reg_data = train_dt; test_data = test_dt; N_levels = N_levels
-
-  # /*----------------------------------*/
   #' ## run ML analyses
-  # /*----------------------------------*/
 
-  #--- all the cases to consider ---#
   case_data <- 
     tibble(
-      Method = c("CF_base", "BRF", "RF")    
+      Method = c("RF_ranger","RF_split")#, "XGBRF", "RF", "CF_base", "BRF")    
     ) 
 
   results_data <- 
     case_data %>%
       mutate(
-        opt_N_data = future_lapply(
+        opt_N_data = future_lapply(              
           seq_len(nrow(.)),
           function(x) {
             ### === apply various methods to get optimal N ===###
@@ -41,8 +36,8 @@ sim_par <- function(i, var_ls, reg_data, test_data, N_levels) {
               rates_ls = N_levels,
               Method = .$Method[[x]]
             )
-          },
-        future.seed = TRUE
+          }
+        , future.seed = TRUE
       )
     )%>%
     unnest(., cols= "opt_N_data")%>%
@@ -54,7 +49,6 @@ sim_par <- function(i, var_ls, reg_data, test_data, N_levels) {
 
 
 get_opt_N <- function(reg_data, test_data, var_ls, rates_ls, Method) {
-
   eval_dt <- bind_rows(reg_data, test_data, .id = "type") %>%
     .[, type:= case_when(type == 1 ~ "train", type == 2 ~ "test")]
     ### === CF_base ===###
@@ -97,7 +91,56 @@ get_opt_N <- function(reg_data, test_data, var_ls, rates_ls, Method) {
         var_ls = var_ls,
         N_levels = rates_ls
       )
-  } 
+  # } else if (Method == "GAM") {
+  #   opt_N_data <- 
+  #     GAM_run(
+  #       reg_data = reg_data,
+  #       var_ls = var_ls
+  #     ) %>%
+  #     GAM_analysis(
+  #       test_data = eval_dt,
+  #       f_results = .,
+  #       var_ls = var_ls,
+  #       N_levels = rates_ls
+  #     )
+  } else if (Method == "XGBRF") {
+      opt_N_data <- 
+        XGBRF_run(
+          reg_data = reg_data,
+          var_ls = var_ls
+        ) %>%
+        XGBRF_analysis(
+          test_data = eval_dt,
+          f_results = .,
+          var_ls = var_ls,
+          N_levels = rates_ls
+        )
+  } else if (Method == "RF_split") {
+      opt_N_data <- 
+        RF_split_run(
+          reg_data = reg_data,
+          var_ls = var_ls
+        ) %>%
+        RF_split_analysis(
+          test_data = eval_dt,
+          f_results = .,
+          var_ls = var_ls,
+          N_levels = rates_ls
+        )
+      
+   }  else if (Method == "RF_ranger") {
+        opt_N_data <- 
+          RF_ranger_run(
+            reg_data = reg_data,
+            var_ls = var_ls
+          ) %>%
+          RF_split_analysis(
+            test_data = eval_dt,
+            f_results = .,
+            var_ls = var_ls,
+            N_levels = rates_ls
+          )
+  }
 
   # === arrange order of columns === #  
   report_data <- opt_N_data[,.(unique_subplot_id, type, opt_N_hat, pred_yield, sim, yield, opt_N)]
@@ -135,7 +178,6 @@ CF_analysis_base <- function(reg_data, var_ls) {
 # /*================================================================*/
 #' # Run CF
 # /*================================================================*/
-
 CF_run <- function(data, rates, var_ls) {
   
   # === treatment assignment ===#
@@ -157,18 +199,15 @@ CF_run <- function(data, rates, var_ls) {
   
   # === CF analysis ===#
   tau_forest_temp <- causal_forest(X, Y, W,
-                                   Y.hat = Y_hat,
-                                   W.hat = W_hat,
+                                  Y.hat = Y_hat,
+                                  W.hat = W_hat,
                                    honesty = TRUE,
                                    num.trees = 2000,
                                    num.threads = 1,
                                    tune.parameters = "all"
   )
-  
   return(tau_forest_temp)
 }
-
-
 
 get_pi_dif_base <- function(test_data, cf_results, var_ls, rates_ls) {
   # test_data=eval_dt; cf_results=cf_base
@@ -230,13 +269,12 @@ get_changes_gradual_base <- function(N_index, data_base, var_ls, rates_ls, cf_re
 
 
 # /*================================================================*/
-#' # Run RF and BRF
+#' # Run RF, BRF and GAM
 # /*================================================================*/
 
 #/*----------------------------------*/
 #' ## Run BRF
 #/*----------------------------------*/
-
 BRF_run <- function(reg_data, var_ls) {
 
   # === Preparation ===#
@@ -260,7 +298,6 @@ BRF_run <- function(reg_data, var_ls) {
 #/*----------------------------------*/
 #' ## Run RF
 #/*----------------------------------*/
-
 RF_run <- function(reg_data, var_ls) {
 
   # === Preparation === #
@@ -281,19 +318,101 @@ RF_run <- function(reg_data, var_ls) {
 }
 
 
+#/*----------------------------------*/
+#' ## Run GAM
+#/*----------------------------------*/
+GAM_run <- function(reg_data, var_ls) {
+  
+  # beta, beta1 and beta2 would interact with the N based on the paper
+  # === Preparation === #
+  
+  # I= var_ls[str_detect(var_ls, "beta")]
+  # X= as.formula(paste0("yield~s(aa_n)+",paste0("s(",var_ls, collapse = "+", ")"),"+", paste0("I(",I, collapse = "+", "* aa_n)") ))
+  
+  X <- as.formula(paste0("yield~s(aa_n,k=2)+",paste0("s(",var_ls, collapse = "+", ")")))
+  
+  GAM_temp <- gam(
+    X,
+    data= reg_data,
+    method= "REML"
+  )
+  return(GAM_temp)
+}
+
+
+#/*----------------------------------*/
+#' ## Run XGBRF
+#/*----------------------------------*/
+XGBRF_run <- function(reg_data, var_ls) {
+  
+  # === Preparation === #
+  X <- reg_data[, c("aa_n", var_ls), with = FALSE] 
+  Y <- reg_data[, yield]
+  
+  # === causal forest analysis ===#
+  XGBRF_temp <- xgboost(
+    data= as.matrix(X),
+    label= Y,
+    max.depth= 4,
+    eta= 0.1,
+    nthread=1,
+    nrounds= 200,
+    objective= "reg:squarederror",
+    verbose = 0
+  )
+  return(XGBRF_temp)
+}
+
+
+#/*----------------------------------*/
+#' ## Run RF_split
+#/*----------------------------------*/
+RF_split_run <- function(reg_data, var_ls) {
+  
+  # === Preparation === #
+  X <- as.formula(paste0("yield~aa_n +",paste0(var_ls, collapse = "+")))
+
+  # === causal forest analysis ===#
+  RF_split_temp <- ranger(
+    formula = X,
+    data= reg_data,
+    num.trees = 2000, 
+    importance= "impurity",
+    split.select.weights= c(1,rep(0.1, length(var_ls)) )
+  )
+  return(RF_split_temp)
+}
+
+#/*----------------------------------*/
+#' ## Run RF_ranger
+#/*----------------------------------*/
+RF_ranger_run <- function(reg_data, var_ls) {
+  
+  # === Preparation === #
+  X <- as.formula(paste0("yield~aa_n +",paste0(var_ls, collapse = "+")))
+  
+  # === causal forest analysis ===#
+  RF_ranger_temp <- ranger(
+    formula = X,
+    data= reg_data,
+    num.trees = 2000, 
+    importance= "impurity"
+  )
+  return(RF_ranger_temp)
+}
+
 
 
 
 #/*----------------------------------*/
 #' ## RF, BRF analysis 
 #/*----------------------------------*/
-
 RF_BRF_analysis <- function(test_data, f_results, var_ls, N_levels) {
 
   N_seq <- seq(min(N_levels), max(N_levels), by = 1)
   
   result <- 
-    test_data %>%
+    test_data %>% #eval_dt%>% # 
     .[,c("sim", "unique_subplot_id", "type","aa_n", var_ls, "opt_N", "yield"), with=FALSE] %>%
     # === Yield Prediction === #
     .[, pred_yield := predict(f_results, newdata = .[, c("aa_n", var_ls), with = FALSE])] %>%
@@ -305,9 +424,75 @@ RF_BRF_analysis <- function(test_data, f_results, var_ls, N_levels) {
     .[, .SD[pi_hat == max(pi_hat), ], by = .(unique_subplot_id, type)] %>%
     setnames("rate", "opt_N_hat") %>%
     .[, .(unique_subplot_id, type, opt_N_hat, pred_yield, sim, yield, opt_N)]
-
   return(result)
 }
+
+
+#/*----------------------------------*/
+#' ## XGBRF analysis 
+#/*----------------------------------*/
+XGBRF_analysis <- function(test_data, f_results, var_ls, N_levels) {
+  
+  N_seq <- seq(min(N_levels), max(N_levels), by = 1)
+  
+  result <- 
+    test_data %>%
+    .[,c("sim", "unique_subplot_id", "type","aa_n", var_ls, "opt_N", "yield"), with=FALSE] %>%
+    # === Yield Prediction === #
+    .[, pred_yield := predict(f_results, newdata = as.matrix(.[, c("aa_n", var_ls), with = FALSE]))] %>%
+    # === EONR estimation === #
+    .[rep(1:nrow(.), each = length(N_seq)),] %>%
+    .[, rate := rep(N_seq, nrow(.) / length(N_seq))] %>%
+    .[, yield_hat := predict(f_results, newdata = .[, c("rate", var_ls), with = FALSE] %>% 
+                             setnames("rate", "aa_n")%>% as.matrix())] %>%
+    .[, pi_hat := pCorn * yield_hat - pN * rate]%>%
+    .[, .SD[pi_hat == max(pi_hat), ], by = .(unique_subplot_id, type)] %>%
+    setnames("rate", "opt_N_hat") %>%
+    .[, .(unique_subplot_id, type, opt_N_hat, pred_yield, sim, yield, opt_N)]
+  return(result)
+}
+
+
+#/*----------------------------------*/
+#' ## RF_split analysis 
+#/*----------------------------------*/
+RF_split_analysis <- function(test_data, f_results, var_ls, N_levels) {
+  
+  N_seq <- seq(min(N_levels), max(N_levels), by = 1)
+  
+  result <- 
+    test_data %>% 
+    .[,c("sim", "unique_subplot_id", "type","aa_n", var_ls, "opt_N", "yield"), with=FALSE] %>%
+    # === Yield Prediction === #
+    .[, pred_yield := predict(f_results, data = .[, c("aa_n", var_ls), with = FALSE])$predictions] %>%
+    # === EONR estimation === #
+    .[rep(1:nrow(.), each = length(N_seq)),] %>%
+    .[, rate := rep(N_seq, nrow(.) / length(N_seq))] %>%
+    .[, yield_hat := predict(f_results, data = .[, c("rate", var_ls), with = FALSE] %>% setnames("rate", "aa_n"))$predictions] %>%
+    .[, pi_hat := pCorn * yield_hat - pN * rate]%>%
+    .[, .SD[pi_hat == max(pi_hat), ], by = .(unique_subplot_id, type)] %>%
+    setnames("rate", "opt_N_hat") %>%
+    .[, .(unique_subplot_id, type, opt_N_hat, pred_yield, sim, yield, opt_N)]
+  return(result)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -342,19 +527,6 @@ get_te_dt <- function(reg_data, test_data, var_ls, rates_ls, Method) {
         var_ls = var_ls,
         rates_ls = rates_ls
       )
-    ### === BCF ===###
-  } else if (Method == "BCF") {
-    te_data <- 
-      BCF_run(
-        reg_data = reg_data,
-        var_ls = var_ls
-      ) %>%
-      BCF_calculate_te(
-        test_data = test_data,
-        f_results = .,
-        var_ls = var_ls,
-        N_levels = rates_ls
-      )
     ### === BRF ===###
   } else if (Method == "BRF") {
     te_data <- 
@@ -381,17 +553,40 @@ get_te_dt <- function(reg_data, test_data, var_ls, rates_ls, Method) {
         var_ls = var_ls,
         N_levels = rates_ls
       )
-
+    ### === XGBRF ===###
+  } else if (Method == "XGBRF") {
+    te_data <- 
+      XGBRF_run(
+        reg_data = reg_data,
+        var_ls = var_ls
+      ) %>%
+      XGBRF_calculate_te(
+        test_data = test_data,
+        f_results = .,
+        var_ls = var_ls,
+        N_levels = rates_ls
+      )
+  } else if (Method == "RF_split") {
+      te_data <- 
+        RF_split_run(
+          reg_data = reg_data,
+          var_ls = var_ls
+        ) %>%
+        RF_split_calculate_te(
+          test_data = test_data,
+          f_results = .,
+          var_ls = var_ls,
+          N_levels = rates_ls
+        )
   }
+  
   return(te_data)
 }
-
 
 
 #/*----------------------------------*/
 #' ## CF-base
 #/*----------------------------------*/
-
 CF_base_calculate_te <- function(test_data, cf_results, var_ls, rates_ls) {
   # test_data=test_dt; cf_results=cf_base
   # var_ls = c("alpha","beta","ymax"); rates_ls = N_levels
@@ -418,9 +613,44 @@ CF_base_calculate_te <- function(test_data, cf_results, var_ls, rates_ls) {
 
 
 #/*----------------------------------*/
+#' ## XGBRF
+#/*----------------------------------*/
+XGBRF_calculate_te <- function(test_data, f_results, var_ls, N_levels) {
+  te_data <- test_data[, c("unique_subplot_id", var_ls, "aa_n", "opt_N", "yield", "X", "Y"), with = FALSE] %>%
+    .[rep(1:nrow(.), each = length(N_levels)), ] %>%
+    .[, rate := rep(N_levels, nrow(.) / length(N_levels))] %>%
+    .[, yield_hat := predict(f_results, newdata = .[, c("rate", var_ls), with = FALSE] %>%
+                              setnames("rate", "aa_n")%>% as.matrix())] %>%
+    #--- Treatment effect calculation ---#
+    .[, yield_base := .SD[rate==min(rate), yield_hat], by = .(unique_subplot_id)] %>%
+    .[, te_base := yield_hat - yield_base] %>%
+    .[, .(unique_subplot_id, rate, te_base)]
+  
+  return(te_data)
+}
+
+
+#/*----------------------------------*/
+#' ## RF_split
+#/*----------------------------------*/
+RF_split_calculate_te <- function(test_data, f_results, var_ls, N_levels) {
+
+  te_data <- test_data[, c("unique_subplot_id", var_ls, "aa_n", "opt_N", "yield", "X", "Y"), with = FALSE] %>%
+    .[rep(1:nrow(.), each = length(N_levels)), ] %>%
+    .[, rate := rep(N_levels, nrow(.) / length(N_levels))] %>%
+    .[, yield_hat := predict(f_results, data = .[, c("rate", var_ls), with = FALSE] %>% setnames("rate","aa_n"))$predictions] %>%
+    #--- Treatment effect calculation ---#
+    .[, yield_base := .SD[rate==min(rate), yield_hat], by = .(unique_subplot_id)] %>%
+    .[, te_base := yield_hat - yield_base] %>%
+    .[, .(unique_subplot_id, rate, te_base)]
+  
+  return(te_data)
+}
+
+
+#/*----------------------------------*/
 #' ## BRF and RF
 #/*----------------------------------*/
-
 RF_BRF_calculate_te <- function(test_data, f_results, var_ls, N_levels) {
   # test_data = test_data_sample; f_results = temp_BRF
   # var_ls = c("alpha","beta","ymax"); N_levels = N_levels 
@@ -436,5 +666,7 @@ RF_BRF_calculate_te <- function(test_data, f_results, var_ls, N_levels) {
 
   return(te_data)
 }
+
+
 
 

@@ -197,4 +197,4 @@ padding_idx <-
 
 analysis_field <- left_join(analysis_field, padding_idx, by="unique_cell_id")
 
-saveRDS(analysis_field, here("Data/for_Simulations/field_analysis.rds"))
+saveRDS(analysis_field, here("Data/analysis_field.rds"))

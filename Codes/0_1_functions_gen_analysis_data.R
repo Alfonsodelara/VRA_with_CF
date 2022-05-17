@@ -534,7 +534,7 @@ gen_yield_MB <- function(ymax, alpha, beta, N) {
 }
 
 
-
+ 
 # /*----------------------------------*/
 #' ## generate application error (+-20)
 # /*----------------------------------*/
