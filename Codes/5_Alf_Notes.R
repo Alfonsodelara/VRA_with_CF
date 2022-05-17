@@ -51,6 +51,7 @@ res_y_test %>%
     RF = "RF",
     BRF = "BRF",
     CNN = "CNN",
+    XCF_base= "XCF_base",
     CF_base = "CF-base"
   )) %>%
   align(align = "center", part = "all") %>%
@@ -69,7 +70,7 @@ res_y_test %>%
 # TABLE
 allML_summary_bySim %>%
   .[type=="test",] %>%
-  .[Method %in% c("RF_ranger","RF_split","XGBRF","RF", "BRF", "CF_base"), ] %>%
+  .[Method %in% c("RF_ranger","RF_split","XGBRF","RF", "BRF", "XCF_base", "CF_base"), ] %>%
   .[Method == "CF_base", Method := "CF-base"] %>%
   .[, Model := case_when(
     Model == "aby" ~ "Scenario: aby",
@@ -210,7 +211,11 @@ tau= data_temp_dt[,opt_N]
 plot(tau, tauhat); abline(0,1)
 
 
-tau_data <- predict(cf_results[[i - 1]], newdata = data_temp_dt, estimate.variance = FALSE)$predictions
+tau_data <- predict(object= bcf_out,  
+                    x_predict_control        = x, #design matrix for the "prognostic" function mu(x)
+                    x_predict_moderate       = x, #Design matrix for the covariate-dependent treatment effects tau(x)
+                    z_pred                   = z, #trt variable
+                    pi_pred            = pi)
 
 
 
